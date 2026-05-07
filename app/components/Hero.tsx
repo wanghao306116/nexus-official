@@ -545,7 +545,7 @@ export default function Hero() {
           className="pointer-events-none absolute inset-0 z-30"
           style={{
             clipPath: detectionRadius > 0
-              ? `circle(${detectionRadius}px at ${textLayerCenter.x}px ${textLayerCenter.y}px)`
+              ? `circle(${detectionRadius + 45}px at ${textLayerCenter.x}px ${textLayerCenter.y}px)`
               : 'circle(0px at 50% 50%)',
           }}
         >
