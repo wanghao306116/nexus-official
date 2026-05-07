@@ -11,22 +11,22 @@ import { useState, useEffect, useRef } from 'react';
 
 // 技能行星配置
 const planetsConfig = [
-  { name: 'JS', fullName: 'JavaScript', color: '#F7DF1E', textColor: '#000', difficulty: 3, speed: 20 },
-  { name: 'PY', fullName: 'Python', color: '#3776AB', textColor: '#fff', difficulty: 3, speed: 22 },
-  { name: 'HTML', fullName: 'HTML', color: '#E34F26', textColor: '#fff', difficulty: 1, speed: 18 },
-  { name: 'CSS', fullName: 'CSS', color: '#1572B6', textColor: '#fff', difficulty: 2, speed: 19 },
-  { name: 'TS', fullName: 'TypeScript', color: '#3178C6', textColor: '#fff', difficulty: 5, speed: 25 },
-  { name: 'GO', fullName: 'Golang', color: '#00ADD8', textColor: '#fff', difficulty: 6, speed: 27 },
-  { name: 'VUE', fullName: 'Vue', color: '#42B883', textColor: '#fff', difficulty: 4, speed: 24 },
-  { name: 'RCT', fullName: 'React', color: '#61DAFB', textColor: '#000', difficulty: 5, speed: 26 },
-  { name: 'NODE', fullName: 'Node.js', color: '#339933', textColor: '#fff', difficulty: 4, speed: 23 },
-  { name: 'TW', fullName: 'Tailwind', color: '#06B6D4', textColor: '#fff', difficulty: 2, speed: 21 },
-  { name: 'DKR', fullName: 'Docker', color: '#2496ED', textColor: '#fff', difficulty: 5, speed: 28 },
-  { name: 'GIT', fullName: 'Git', color: '#F05032', textColor: '#fff', difficulty: 3, speed: 22 },
-  { name: 'NXT', fullName: 'Next.js', color: '#000000', textColor: '#fff', difficulty: 6, speed: 29 },
-  { name: 'RS', fullName: 'Rust', color: '#000000', textColor: '#fff', difficulty: 9, speed: 35 },
-  { name: 'C++', fullName: 'C++', color: '#00599C', textColor: '#fff', difficulty: 8, speed: 33 },
-  { name: 'SQL', fullName: 'SQL', color: '#4479A1', textColor: '#fff', difficulty: 4, speed: 24 },
+  { name: 'JS', fullName: 'JavaScript', color: '#F7DF1E', textColor: '#000', difficulty: 3, speed: 40 },
+  { name: 'PY', fullName: 'Python', color: '#3776AB', textColor: '#fff', difficulty: 3, speed: 44 },
+  { name: 'HTML', fullName: 'HTML', color: '#E34F26', textColor: '#fff', difficulty: 1, speed: 36 },
+  { name: 'CSS', fullName: 'CSS', color: '#1572B6', textColor: '#fff', difficulty: 2, speed: 38 },
+  { name: 'TS', fullName: 'TypeScript', color: '#3178C6', textColor: '#fff', difficulty: 5, speed: 50 },
+  { name: 'GO', fullName: 'Golang', color: '#00ADD8', textColor: '#fff', difficulty: 6, speed: 54 },
+  { name: 'VUE', fullName: 'Vue', color: '#42B883', textColor: '#fff', difficulty: 4, speed: 48 },
+  { name: 'RCT', fullName: 'React', color: '#61DAFB', textColor: '#000', difficulty: 5, speed: 52 },
+  { name: 'NODE', fullName: 'Node.js', color: '#339933', textColor: '#fff', difficulty: 4, speed: 46 },
+  { name: 'TW', fullName: 'Tailwind', color: '#06B6D4', textColor: '#fff', difficulty: 2, speed: 42 },
+  { name: 'DKR', fullName: 'Docker', color: '#2496ED', textColor: '#fff', difficulty: 5, speed: 56 },
+  { name: 'GIT', fullName: 'Git', color: '#F05032', textColor: '#fff', difficulty: 3, speed: 44 },
+  { name: 'NXT', fullName: 'Next.js', color: '#000000', textColor: '#fff', difficulty: 6, speed: 58 },
+  { name: 'RS', fullName: 'Rust', color: '#000000', textColor: '#fff', difficulty: 9, speed: 70 },
+  { name: 'C++', fullName: 'C++', color: '#00599C', textColor: '#fff', difficulty: 8, speed: 66 },
+  { name: 'SQL', fullName: 'SQL', color: '#4479A1', textColor: '#fff', difficulty: 4, speed: 48 },
 ];
 
 interface Planet {
@@ -49,16 +49,19 @@ interface Planet {
   vy: number;
   isColliding: boolean;
   returnProgress: number; // 回到轨道的进度 0-1
+  collisionCooldown: number; // 碰撞冷却时间（帧数）
 }
 
 export default function Hero() {
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const [detectionRadius, setDetectionRadius] = useState(0);
+  const [textLayerCenter, setTextLayerCenter] = useState({ x: 0, y: 0 }); // 缓存文字层中心位置
   const [planets, setPlanets] = useState<Planet[]>([]);
   const sectionRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const textLayerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
+  const lastUpdateTimeRef = useRef<number>(0);
 
   // 黑色圆形的固定半径
   const circleRadius = 100;
@@ -78,11 +81,21 @@ export default function Hero() {
   useEffect(() => {
     // 计算触发范围的圆形半径
     const calculateDetectionRadius = () => {
-      if (textLayerRef.current) {
-        const rect = textLayerRef.current.getBoundingClientRect();
-        const diagonal = Math.sqrt(Math.pow(rect.width, 2) + Math.pow(rect.height, 2));
-        const radius = diagonal / 2 + 100;
+      if (textLayerRef.current && contentRef.current) {
+        // 使用 offsetWidth/offsetHeight 获取未缩放的尺寸
+        const width = textLayerRef.current.offsetWidth;
+        const height = textLayerRef.current.offsetHeight;
+        const diagonal = Math.sqrt(Math.pow(width, 2) + Math.pow(height, 2));
+        const radius = diagonal / 2; // 移除了 +100，现在直接使用对角线的一半
         setDetectionRadius(radius);
+        
+        // 缓存文字层中心位置，避免每次渲染都计算
+        const textRect = textLayerRef.current.getBoundingClientRect();
+        const contentRect = contentRef.current.getBoundingClientRect();
+        setTextLayerCenter({
+          x: textRect.left - contentRect.left + textRect.width / 2,
+          y: textRect.top - contentRect.top + textRect.height / 2,
+        });
         
         // 初始化或更新行星轨道半径
         if (planets.length === 0) {
@@ -114,6 +127,7 @@ export default function Hero() {
               vy: 0,
               isColliding: false,
               returnProgress: 1,
+              collisionCooldown: 0,
             };
           });
           setPlanets(initialPlanets);
@@ -154,12 +168,23 @@ export default function Hero() {
   }, [planets.length]);
 
   useEffect(() => {
+    let rafId: number | null = null;
+    let lastMouseX = 0;
+    let lastMouseY = 0;
+
     const handleMouseMove = (e: MouseEvent) => {
-      if (contentRef.current && textLayerRef.current) {
+      if (contentRef.current) {
         const contentRect = contentRef.current.getBoundingClientRect();
-        const mouseX = e.clientX - contentRect.left;
-        const mouseY = e.clientY - contentRect.top;
-        setMousePosition({ x: mouseX, y: mouseY });
+        lastMouseX = e.clientX - contentRect.left;
+        lastMouseY = e.clientY - contentRect.top;
+        
+        // 使用 requestAnimationFrame 节流，避免过于频繁的状态更新
+        if (rafId === null) {
+          rafId = requestAnimationFrame(() => {
+            setMousePosition({ x: lastMouseX, y: lastMouseY });
+            rafId = null;
+          });
+        }
       }
     };
 
@@ -172,6 +197,9 @@ export default function Hero() {
       if (element) {
         element.removeEventListener('mousemove', handleMouseMove);
       }
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
     };
   }, []);
 
@@ -179,13 +207,25 @@ export default function Hero() {
   useEffect(() => {
     if (planets.length === 0 || detectionRadius === 0) return;
 
-    const updatePhysics = () => {
+    const updatePhysics = (currentTime: number) => {
+      // 限制更新频率为 30fps，减少性能消耗
+      if (currentTime - lastUpdateTimeRef.current < 33) {
+        animationFrameRef.current = requestAnimationFrame(updatePhysics);
+        return;
+      }
+      lastUpdateTimeRef.current = currentTime;
+
       setPlanets(prevPlanets => {
         const newPlanets = [...prevPlanets];
-        const dt = 0.016; // 约 60fps
+        const dt = 0.033; // 30fps
 
         // 更新轨道角度和位置
         newPlanets.forEach(planet => {
+          // 更新碰撞冷却时间
+          if (planet.collisionCooldown > 0) {
+            planet.collisionCooldown--;
+          }
+
           if (planet.isColliding) {
             // 碰撞后，继续更新轨道角度（行星继续"公转"）
             planet.orbitAngle += (Math.PI * 2) / (planet.orbitSpeed * 60);
@@ -258,8 +298,8 @@ export default function Hero() {
             const p1 = newPlanets[i];
             const p2 = newPlanets[j];
             
-            // 跳过已经在碰撞状态的行星
-            if (p1.isColliding || p2.isColliding) continue;
+            // 如果两个行星都在冷却时间内，跳过碰撞检测（避免重复碰撞）
+            if (p1.collisionCooldown > 0 && p2.collisionCooldown > 0) continue;
             
             const dx = p2.x - p1.x;
             const dy = p2.y - p1.y;
@@ -283,16 +323,18 @@ export default function Hero() {
               p2.isColliding = true;
               p1.returnProgress = 0;
               p2.returnProgress = 0;
+              p1.collisionCooldown = 10; // 设置冷却时间为 10 帧（约 0.33 秒）
+              p2.collisionCooldown = 10;
 
               // 碰撞方向单位向量
               const nx = dx / distance;
               const ny = dy / distance;
 
               // 弹性碰撞系数
-              const restitution = 0.7;
+              const restitution = 0.5; // 降低弹性，减少碰撞后的速度
 
-              // 计算碰撞冲量（简化版本，确保有明显效果）
-              const relativeVelocity = 2.0; // 基础相对速度
+              // 计算碰撞冲量（降低基础速度）
+              const relativeVelocity = 1.0; // 降低基础相对速度，从 2.0 降到 1.0
               const totalMass = p1.mass + p2.mass;
               
               // 根据质量分配速度（质量小的获得更大速度）
@@ -313,7 +355,7 @@ export default function Hero() {
               const p1RadialAngle = collisionAngle - p1Angle;
               const p2RadialAngle = collisionAngle - p2Angle;
               
-              const radialForce = 1.5;
+              const radialForce = 0.8; // 降低径向力，从 1.5 降到 0.8
               
               p1.vx += Math.cos(p1Angle) * radialForce * Math.sin(p1RadialAngle) / p1.mass;
               p1.vy += Math.sin(p1Angle) * radialForce * Math.sin(p1RadialAngle) / p1.mass;
@@ -323,14 +365,14 @@ export default function Hero() {
 
               // 添加随机扰动
               const randomAngle = Math.random() * Math.PI * 2;
-              const randomForce = 0.3;
+              const randomForce = 0.15; // 降低随机扰动，从 0.3 降到 0.15
               p1.vx += Math.cos(randomAngle) * randomForce;
               p1.vy += Math.sin(randomAngle) * randomForce;
               p2.vx += Math.cos(randomAngle + Math.PI) * randomForce;
               p2.vy += Math.sin(randomAngle + Math.PI) * randomForce;
 
               // 限制速度上限
-              const maxSpeed = 10;
+              const maxSpeed = 5; // 降低最大速度，从 10 降到 5
               const p1Speed = Math.sqrt(p1.vx * p1.vx + p1.vy * p1.vy);
               if (p1Speed > maxSpeed) {
                 p1.vx = (p1.vx / p1Speed) * maxSpeed;
@@ -389,39 +431,44 @@ export default function Hero() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.8, delay: 0.2 }}
       >
-        {/* 星轨效果 */}
+        {/* 星轨效果 - 轨道和行星共用同一个中心 */}
         {detectionRadius > 0 && (
           <div
             className="pointer-events-none absolute z-5"
             style={{
-              width: `${detectionRadius * 2}px`,
-              height: `${detectionRadius * 2}px`,
               left: '50%',
               top: '50%',
-              transform: 'translate(-50%, -50%)',
+              width: 0,
+              height: 0,
             }}
           >
             {/* 主轨道 - 多层 */}
-            {[0, 1, 2, 3].map((layer) => (
-              <div
-                key={layer}
-                className="absolute rounded-full"
-                style={{
-                  width: `${(detectionRadius - 45 + layer * 30) * 2}px`,
-                  height: `${(detectionRadius - 45 + layer * 30) * 2}px`,
-                  left: '50%',
-                  top: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  border: '1px solid rgba(0, 0, 0, 0.1)',
-                  boxShadow: 'inset 0 0 15px rgba(0, 0, 0, 0.03)',
-                }}
-              />
-            ))}
+            {[0, 1, 2, 3].map((layer) => {
+              const radius = detectionRadius - 45 + layer * 30;
+              return (
+                <div
+                  key={layer}
+                  className="absolute rounded-full"
+                  style={{
+                    width: `${radius * 2}px`,
+                    height: `${radius * 2}px`,
+                    left: `-${radius}px`,
+                    top: `-${radius}px`,
+                    border: '1px solid rgba(0, 0, 0, 0.1)',
+                    boxShadow: 'inset 0 0 15px rgba(0, 0, 0, 0.03)',
+                  }}
+                />
+              );
+            })}
             
             {/* 旋转的虚线轨道 - 最外层 */}
             <div
-              className="absolute inset-0 rounded-full"
+              className="absolute rounded-full"
               style={{
+                width: `${detectionRadius * 2}px`,
+                height: `${detectionRadius * 2}px`,
+                left: `-${detectionRadius}px`,
+                top: `-${detectionRadius}px`,
                 border: '1px dashed rgba(0, 0, 0, 0.2)',
                 animation: 'spin 30s linear infinite',
               }}
@@ -433,9 +480,8 @@ export default function Hero() {
               style={{
                 width: `${(detectionRadius - 50) * 2}px`,
                 height: `${(detectionRadius - 50) * 2}px`,
-                left: '50%',
-                top: '50%',
-                transform: 'translate(-50%, -50%)',
+                left: `-${detectionRadius - 50}px`,
+                top: `-${detectionRadius - 50}px`,
                 border: '1px solid rgba(0, 0, 0, 0.06)',
               }}
             />
@@ -447,9 +493,11 @@ export default function Hero() {
                   key={planet.id}
                   className="absolute"
                   style={{
-                    left: `calc(50% + ${planet.x}px)`,
-                    top: `calc(50% + ${planet.y}px)`,
+                    left: `${planet.x - planet.size / 2}px`,
+                    top: `${planet.y - planet.size / 2}px`,
                     transition: planet.isColliding ? 'none' : 'left 0.1s linear, top 0.1s linear',
+                    willChange: 'left, top',
+                    transform: 'translateZ(0)', // 启用 GPU 加速
                   }}
                 >
                   <div
@@ -460,8 +508,8 @@ export default function Hero() {
                       backgroundColor: planet.color,
                       color: planet.textColor,
                       fontSize: `${planet.fontSize}px`,
-                      transform: 'translate(-50%, -50%)',
                       animation: `spin-fast ${planet.spinSpeed}s linear infinite`,
+                      willChange: 'transform',
                     }}
                   >
                     {planet.name}
@@ -497,7 +545,7 @@ export default function Hero() {
           className="pointer-events-none absolute inset-0 z-30"
           style={{
             clipPath: detectionRadius > 0
-              ? `circle(${detectionRadius}px at ${contentRef.current ? (textLayerRef.current!.getBoundingClientRect().left - contentRef.current.getBoundingClientRect().left + textLayerRef.current!.getBoundingClientRect().width / 2) : 0}px ${contentRef.current ? (textLayerRef.current!.getBoundingClientRect().top - contentRef.current.getBoundingClientRect().top + textLayerRef.current!.getBoundingClientRect().height / 2) : 0}px)`
+              ? `circle(${detectionRadius}px at ${textLayerCenter.x}px ${textLayerCenter.y}px)`
               : 'circle(0px at 50% 50%)',
           }}
         >
